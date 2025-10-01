@@ -1,82 +1,68 @@
-# Lightweight React Template for KAVIA
+# CrewAI Medical Support - React Frontend (Ocean Professional)
 
-This project provides a minimal React template with a clean, modern UI and minimal dependencies.
+A modern, production-ready React UI for interacting with the CrewAI-based medical support chatbot.  
+Implements a centered chat panel, side cards for history and recommendations, and a branded header with responsive design.
 
 ## Features
 
-- **Lightweight**: No heavy UI frameworks - uses only vanilla CSS and React
-- **Modern UI**: Clean, responsive design with KAVIA brand styling
-- **Fast**: Minimal dependencies for quick loading times
-- **Simple**: Easy to understand and modify
+- Ocean Professional theme (blue and amber accents) with subtle shadows, rounded corners, gradients, and smooth transitions
+- Centered chat panel for user and agent messages
+- Side panel with conversation history and dynamic recommendations
+- Responsive layout for desktop and mobile
+- REST API integration with FastAPI backend:
+  - GET `/api/chat/history` — list of sessions
+  - GET `/api/chat/{session_id}` — conversation details
+  - POST `/api/chat` — send a message (accepts `{ session_id?, message }`)
+- Clear error handling and optimistic UI for message sending
+- No heavy UI frameworks; pure React + CSS
 
 ## Getting Started
 
-In the project directory, you can run:
+1) Install dependencies
 
-### `npm start`
-
-Runs the app in development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
-
-### `npm test`
-
-Launches the test runner in interactive watch mode.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-## Customization
-
-### Colors
-
-The main brand colors are defined as CSS variables in `src/App.css`:
-
-```css
-:root {
-  --kavia-orange: #E87A41;
-  --kavia-dark: #1A1A1A;
-  --text-color: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.7);
-  --border-color: rgba(255, 255, 255, 0.1);
-}
+```bash
+npm install
 ```
 
-### Components
+2) Set environment variables
 
-This template uses pure HTML/CSS components instead of a UI framework. You can find component styles in `src/App.css`. 
+Copy `.env.example` to `.env` and set the backend URL.
 
-Common components include:
-- Buttons (`.btn`, `.btn-large`)
-- Container (`.container`)
-- Navigation (`.navbar`)
-- Typography (`.title`, `.subtitle`, `.description`)
+```bash
+cp .env.example .env
+# edit .env and set REACT_APP_API_BASE_URL=http://localhost:8000
+```
 
-## Learn More
+3) Run the development server
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+```bash
+npm start
+```
 
-### Code Splitting
+Open http://localhost:3000 to view the app.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+## Environment Variables
 
-### Analyzing the Bundle Size
+- `REACT_APP_API_BASE_URL` (required): Base URL of your FastAPI backend (e.g., `http://localhost:8000`)
+- `REACT_APP_SITE_URL` (optional): Site URL for redirect purposes if needed by the backend
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+## Expected Backend Endpoints
 
-### Making a Progressive Web App
+Adjust paths in `src/App.js` if needed:
+- `GET /api/chat/history` => `[{ id, title?, created_at?, updated_at? }]`
+- `GET /api/chat/{session_id}` => `{ id, messages: [{ role, content, timestamp? }], recommendations?: [string] }`
+- `POST /api/chat` with JSON `{ session_id?: string|null, message: string }`  
+  Returns `{ id, messages, recommendations? }`
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## Production Build
 
-### Advanced Configuration
+```bash
+npm run build
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+This will create an optimized production build in the `build` folder.
 
-### Deployment
+## Notes
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- The UI includes a persistent disclaimer emphasizing informational use only, not medical advice.
+- The design avoids third-party UI kits, maintaining a lightweight footprint.
