@@ -29,6 +29,14 @@ source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
 pip install -r requirements.txt
 ```
 
+Troubleshooting: ModuleNotFoundError: No module named 'fastapi'
+- Ensure dependencies are installed from requirements.txt (inside an activated venv is recommended):
+  ```bash
+  python -m pip install --upgrade pip
+  pip install --upgrade --force-reinstall -r requirements.txt
+  ```
+- If you cannot use a virtual environment in your environment, pip will default to user installs; still ensure the above completes successfully before starting uvicorn.
+
 Note on dependencies:
 - This backend pins Pydantic and pydantic-core versions to satisfy shelly-ai==0.1.4 requirements (pydantic==2.10.6, pydantic-core==2.27.2) and uses a compatible FastAPI version.
 - If you previously installed dependencies, please reinstall to apply the updated pins:
