@@ -45,6 +45,9 @@ class ClinicalAgent:
         has_fever = ("fever" in q or "temperature" in q or "temp" in q)
         has_sob = ("shortness of breath" in q) or ("dyspnea" in q)
         has_syncope = ("syncope" in q) or ("passed out" in q) or ("fainted" in q) or ("collapse" in q)
+        has_runny_nose = ("runny nose" in q) or ("rhinorrhea" in q)
+        has_sore_throat = ("sore throat" in q) or ("pharyngitis" in q)
+        explicitly_denies_chest_pain = ("no chest pain" in q) or ("without chest pain" in q)
 
         # Retrieve guideline context flags
         joined = " ".join(rt.lower() for rt in retrieved_texts)
@@ -54,17 +57,28 @@ class ClinicalAgent:
         g_has_cxr = ("chest x-ray" in joined) or ("x-ray" in joined) or ("chest xray" in joined)
         g_has_sat = ("saturation" in joined) or ("oxygen" in joined) or ("oximeter" in joined)
 
-        # Red-flag gating: require red flag context for advanced tests
-        red_flag_ctx = has_chest_pain or has_syncope or has_sob or g_has_chest_pain_ctx
+        # Identify classic upper-respiratory cold pattern without red flags
+        # If it's an isolated cold pattern (runny nose/sore throat +/- cough/fever) and user denies chest pain and no syncope/SOB,
+        # then we must not emit advanced tests (ECG/troponin/CXR).
+        isolated_cold_pattern = (
+            (has_runny_nose or has_sore_throat) and
+            not has_chest_pain and
+            not has_syncope and
+            not has_sob and
+            explicitly_denies_chest_pain
+        )
 
-        # Advanced tests only when red-flag/chest contexts are present
+        # Red-flag gating: require red flag context for advanced tests
+        red_flag_ctx = (has_chest_pain or has_syncope or has_sob or g_has_chest_pain_ctx) and not isolated_cold_pattern
+
+        # Advanced tests only when red-flag/chest contexts are present AND not an isolated cold pattern
         if red_flag_ctx:
             # Require explicit test mention in guidelines or explicit chest pain in the query as additional safeguard
-            if g_has_ecg or has_chest_pain:
+            if (g_has_ecg or has_chest_pain) and not isolated_cold_pattern:
                 tests.append("Test: ECG (electrocardiogram) — Use-case: Initial assessment for chest pain or concerning syncope/collapse. Safety/escalation: If severe pain, syncope, or persistent symptoms, seek urgent in-person evaluation.")
-            if g_has_trop or has_chest_pain:
+            if (g_has_trop or has_chest_pain) and not isolated_cold_pattern:
                 tests.append("Test: High-sensitivity troponin — Use-case: Assess myocardial injury when indicated in chest pain contexts. Safety: Follow local protocols; abnormal results need clinical evaluation.")
-            if g_has_cxr or has_chest_pain:
+            if (g_has_cxr or has_chest_pain) and not isolated_cold_pattern:
                 tests.append("Test: Chest X-ray — Use-case: Evaluate for pulmonary/structural causes when appropriate in red-flag respiratory or chest-pain presentations. Safety: Minimal radiation; use per clinical guidance.")
 
         # Basic fever check for classic cold/flu symptoms

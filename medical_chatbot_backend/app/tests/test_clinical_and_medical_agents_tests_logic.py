@@ -41,6 +41,20 @@ def test_clinical_agent_basic_cold_flu_returns_only_basic_checks():
     assert any("oximetry" in s or "spo2" in s for s in lower), "SpO2 check may be suggested with respiratory symptoms"
 
 # PUBLIC_INTERFACE
+def test_clinical_agent_isolated_runny_nose_no_advanced_tests():
+    """
+    Isolated runny nose/sore throat without chest pain or red flags should never emit ECG, troponin, or chest X-ray.
+    Only allow basic checks like temperature; SpO2 only if cough/SOB context is present.
+    """
+    agent = ClinicalAgent()
+    q = "I have a runny nose and sore throat for 2 days. No chest pain. No shortness of breath."
+    flat = agent.recommend(q)
+    lower = [s.lower() for s in flat]
+    assert not any("ecg" in s or "troponin" in s or "x-ray" in s for s in lower), "Advanced tests must not be suggested for isolated runny nose/sore throat"
+    # Since no fever mentioned, temperature may not appear; ensure no SpO2 either (no cough/SOB)
+    assert not any("oximetry" in s or "spo2" in s for s in lower), "SpO2 should not be suggested without respiratory symptoms"
+
+# PUBLIC_INTERFACE
 def test_medical_agent_meds_are_symptom_linked():
     """MedicalAgent medicine suggestions should only appear if corresponding symptoms are present in the query."""
     agent = MedicalAgent()
