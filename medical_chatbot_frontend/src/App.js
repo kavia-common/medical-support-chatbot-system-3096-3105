@@ -31,6 +31,93 @@ export function buildApiUrl(path, params) {
 
 /**
  * PUBLIC_INTERFACE
+ * Structured display helpers for parsing recommendations
+ * We detect lines that look like:
+ *  - "Test: <name> — Use-case: ... Safety: ...", or
+ *  - "Medicine: <name> — Use-case: ... Dosing/Safety: ..." / "Dosing: ... Safety: ..."
+ *  - "Support:" / "Option:" items are treated as supportive care
+ */
+function parseStructuredItems(items = []) {
+  const tests = [];
+  const medicines = [];
+  const support = [];
+  const notes = [];
+  const disclaimerLines = [];
+
+  const isDisclaimer = (s) =>
+    (s || '').toLowerCase().includes('not medical advice') ||
+    (s || '').toLowerCase().includes('informational purposes only');
+
+  const normalize = (s) => (s || '').trim();
+
+  for (const raw of items) {
+    const line = normalize(raw);
+    if (!line) continue;
+
+    if (isDisclaimer(line)) {
+      disclaimerLines.push(line);
+      continue;
+    }
+
+    // Headings emitted by backend flattening
+    if (/^Suggested tests\/assessments:/i.test(line)) {
+      // skip heading; items will follow
+      continue;
+    }
+    if (/^Suggested medicines\/support:/i.test(line)) {
+      // skip heading; items will follow
+      continue;
+    }
+    if (/^Contextual guidance/i.test(line) || /^Selection rationale/i.test(line)) {
+      // treat as a contextual note heading and keep
+      notes.push(line);
+      continue;
+    }
+
+    // Detect "Test: ..." pattern
+    if (/^Test:/i.test(line) || /^Check:/i.test(line)) {
+      tests.push(line);
+      continue;
+    }
+
+    // Detect medicine/support patterns
+    if (/^Medicine:/i.test(line)) {
+      medicines.push(line);
+      continue;
+    }
+    if (/^Support:/i.test(line) || /^Option:/i.test(line)) {
+      support.push(line);
+      continue;
+    }
+
+    // Default to notes/context
+    notes.push(line);
+  }
+
+  // Ensure only unique lines while preserving order
+  const dedupe = (arr) => {
+    const seen = new Set();
+    const out = [];
+    for (const s of arr) {
+      const k = (s || '').toLowerCase();
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push(s);
+    }
+    return out;
+  };
+
+  return {
+    tests: dedupe(tests),
+    medicines: dedupe(medicines),
+    support: dedupe(support),
+    notes: dedupe(notes),
+    disclaimers: dedupe(disclaimerLines),
+  };
+}
+
+/**
+ * PUBLIC_INTERFACE
  * ChatMessage component
  * Renders a single chat message (user or agent)
  */
@@ -292,6 +379,9 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
 
+  // Derived structured suggestions parsed from recommendations
+  const structured = useMemo(() => parseStructuredItems(recommendations), [recommendations]);
+
   const scrollRef = useRef(null);
 
   const disclaimer = useMemo(
@@ -391,15 +481,13 @@ function App() {
           <aside className="side-panel" aria-label="Side panel with history and recommendations">
             <div className="side-scroll">
               <HistoryList sessions={sessions} onSelect={handleSelectSession} />
-              <RecommendationCard title="Recommendations" items={recommendations} />
-              <div className="card">
-                <div className="card-header" style={{ color: THEME.error }}>
-                  Disclaimer
-                </div>
-                <div className="card-body">
-                  <p className="disclaimer">{disclaimer}</p>
-                </div>
-              </div>
+              {/* Structured recommendation sections */}
+              <RecommendationCard title="Suggested Tests / Checks" items={structured.tests} />
+              <RecommendationCard title="Suggested Medicines" items={structured.medicines} />
+              <RecommendationCard title="Supportive Care Options" items={structured.support} />
+              <RecommendationCard title="Context & Notes" items={structured.notes} />
+              {/* Strong disclaimers, if any parsed */}
+              <RecommendationCard title="Important Disclaimer" items={structured.disclaimers.length ? structured.disclaimers : [disclaimer]} />
             </div>
           </aside>
 
