@@ -33,6 +33,8 @@ cp .env.example .env
 # edit .env and set REACT_APP_API_BASE_URL=http://localhost:8000
 ```
 
+If you don’t set `REACT_APP_API_BASE_URL`, the app will default to `http://localhost:8000` for development/preview environments.
+
 3) Run the development server
 
 ```bash
@@ -40,6 +42,16 @@ npm start
 ```
 
 Open http://localhost:3000 to view the app.
+
+4) Verify backend connectivity
+
+- Ensure the backend is running at http://localhost:8000 (or your chosen host/port).
+- Open http://localhost:8000/docs to check API docs.
+- Visit http://localhost:8000/ in your browser to see `{"status":"ok"}` health.
+- In the browser devtools console, you should see a log like:
+  `[api] Using API base URL: http://localhost:8000`
+- If requests fail, create or update `medical_chatbot_frontend/.env` with:
+  `REACT_APP_API_BASE_URL=http://localhost:8000`
 
 ## Environment Variables
 
