@@ -117,7 +117,8 @@ Notes:
 - This project is for demonstration and educational purposes only.
 - No data is persisted across server restarts.
 - The RAG component is a mock: deterministic pseudo-embeddings + in-memory vector index.
-- PatientAgent and MedicalAgent now use session-scoped memory to avoid repeating questions and to gate medicine suggestions until triage is complete.
+- PatientAgent and MedicalAgent use session-scoped memory to avoid repeating questions and to gate medicine suggestions until triage is complete.
+- Slot state (asked/answered) is maintained across the entire session; once a slot is asked or answered it will not be re-asked. ClinicalAgent and MedicalAgent produce deterministic, deduplicated suggestions based on the session context.
 
 ## Tests
 

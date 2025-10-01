@@ -114,6 +114,17 @@ class ClinicalAgent:
         """
         return self.store.query(user_query or "general", k=k)
 
+    def _dedupe(self, items: List[str]) -> List[str]:
+        seen = set()
+        out = []
+        for i in items:
+            key = (i or "").strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            out.append(i)
+        return out
+
     # PUBLIC_INTERFACE
     def suggest(self, user_query: str, k: int = 3) -> Dict[str, List[str]]:
         """
@@ -132,16 +143,17 @@ class ClinicalAgent:
         results = self._rag(user_query, k=k)
         retrieved_texts = [t for _, t, _ in results if "informational purposes only" not in t.lower()]
 
-        tests = self._extract_tests(user_query, retrieved_texts)
-        meds = self._extract_medicines(user_query, retrieved_texts)
+        tests = self._dedupe(self._extract_tests(user_query, retrieved_texts))
+        meds = self._dedupe(self._extract_medicines(user_query, retrieved_texts))
 
         notes: List[str] = []
-        # We can include top 1-2 retrieved items as contextual notes (optional, trimmed)
+        # Include up to top 2 retrieved items as contextual notes (optional, trimmed)
         for text in retrieved_texts[:2]:
             notes.append(text)
 
         # Always include disclaimer at the end
         notes.append(DISLCAIMER_TEXT)
+        notes = self._dedupe(notes)
 
         return {
             "tests": tests,
@@ -174,4 +186,4 @@ class ClinicalAgent:
         # Ensure disclaimer present even if notes empty
         if not any(DISLCAIMER_TEXT.lower() in s.lower() for s in flat):
             flat.append(DISLCAIMER_TEXT)
-        return flat or [DISLCAIMER_TEXT]
+        return self._dedupe(flat) or [DISLCAIMER_TEXT]

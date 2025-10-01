@@ -29,6 +29,17 @@ class MedicalAgent:
         # Keep medicines short and generic with safety warnings
         return meds
 
+    def _dedupe_preserve_order(self, items: List[str]) -> List[str]:
+        seen = set()
+        out = []
+        for it in items:
+            key = (it or "").strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            out.append(it)
+        return out
+
     # PUBLIC_INTERFACE
     def recommend(self, user_query: str, k: int = 3, allow_meds: bool = True) -> List[str]:
         """
@@ -40,10 +51,10 @@ class MedicalAgent:
             k: Number of guideline snippets to retrieve.
             allow_meds: If False, medicine suggestions are withheld until triage completion.
         """
-        results = self.store.query(user_query, k=k)
+        # Deterministic retrieval for given query using mock embeddings; filter disclaimer doc
+        results = self.store.query(user_query or "general", k=max(1, k))
         recs: List[str] = []
-        for _, text, score in results:
-            # Filter out the disclaimer doc from ranking to avoid redundancy in content
+        for _, text, _ in results:
             if "informational purposes only" in text.lower():
                 continue
             recs.append(text)
@@ -54,6 +65,10 @@ class MedicalAgent:
             if med_suggestions:
                 recs.extend(med_suggestions)
 
-        # Add explicit disclaimer as final entry
-        recs.append(DISLCAIMER_TEXT)
+        # Remove duplicates while preserving ordering and trim to a reasonable size
+        recs = self._dedupe_preserve_order(recs)[: 3 + (2 if allow_meds else 0)]
+
+        # Add explicit disclaimer as final entry (ensure single instance)
+        if not any(DISLCAIMER_TEXT.lower() in (r or "").lower() for r in recs):
+            recs.append(DISLCAIMER_TEXT)
         return recs or [DISLCAIMER_TEXT]

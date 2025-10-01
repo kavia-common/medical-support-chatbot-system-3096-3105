@@ -33,17 +33,23 @@ class ChatService:
         self.medical_agent = MedicalAgent()
         self.clinical_agent = ClinicalAgent()
         # Session memory keyed by session id
+        # Use only JSON-serializable primitives for potential future persistence
         self.session_state: Dict[str, Dict[str, Any]] = {}
 
     def _ensure_state(self, sid: str) -> Dict[str, Any]:
         state = self.session_state.get(sid)
         if not state:
             state = {
-                "asked_slots": set(),       # type: Set[str]
-                "answered_slots": set(),    # type: Set[str]
-                "triage_complete": False,   # type: bool
+                "asked_slots": [],        # List[str]
+                "answered_slots": [],     # List[str]
+                "triage_complete": False, # bool
             }
             self.session_state[sid] = state
+        else:
+            # Defensive normalization
+            state["asked_slots"] = list(state.get("asked_slots") or [])
+            state["answered_slots"] = list(state.get("answered_slots") or [])
+            state["triage_complete"] = bool(state.get("triage_complete", False))
         return state
 
     # PUBLIC_INTERFACE
@@ -86,13 +92,18 @@ class ChatService:
             Message(role="user", content=user_text, timestamp=now)
         )
 
+        # Prepare sets from serialized lists
+        asked_set = set(state["asked_slots"])
+        answered_set = set(state["answered_slots"])
+
         # PatientAgent response with stateful slot tracking
         reply_text, updated_state = self.patient_agent.respond(
-            session.messages, user_text, asked_slots=set(state["asked_slots"]), answered_slots=set(state["answered_slots"])
+            session.messages, user_text, asked_slots=asked_set, answered_slots=answered_set
         )
-        # Update state from patient agent (asked/answered/triage_complete)
-        state["asked_slots"] = set(updated_state.get("asked_slots", set()))
-        state["answered_slots"] = set(updated_state.get("answered_slots", set()))
+
+        # Update state from patient agent (asked/answered/triage_complete) and store back as lists
+        state["asked_slots"] = sorted(list(set(updated_state.get("asked_slots", set()))))
+        state["answered_slots"] = sorted(list(set(updated_state.get("answered_slots", set()))))
         state["triage_complete"] = bool(updated_state.get("triage_complete", False))
 
         # Store assistant message but strip markers for user-facing display

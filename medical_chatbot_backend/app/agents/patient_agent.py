@@ -7,10 +7,12 @@ class PatientAgent:
     PatientAgent handles conversational structure, gathers symptoms interactively,
     and produces succinct structured notes.
 
-    Strategy to avoid repetition:
+    Strategy to avoid repetition and robust state:
     - Maintain explicit session-state sets for ASKED and ANSWERED slots carried by ChatService.
-    - Continue to infer answers from user text heuristically.
+    - Continue to infer answers from user text heuristically, and promote inferred answers into ANSWERED.
     - Only ask about slots that are neither asked nor answered.
+    - Never re-ask a slot in the same session once marked asked (even if the previous turn was interrupted).
+    - If all required slots are answered, stop asking questions and move to summary/guidance.
     Slots: duration, severity, associated symptoms, temperature (if fever mentioned), pain location (if pain mentioned).
     """
 
@@ -39,32 +41,32 @@ class PatientAgent:
     def _answered_slots_from_history(self, history: List[Message]) -> Set[str]:
         answered: Set[str] = set()
         # Examine last few user messages to infer responses
-        user_msgs = [m.content.lower() for m in history if m.role == "user"][-5:]
+        user_msgs = [m.content.lower() for m in history if m.role == "user"][-8:]
         text = " ".join(user_msgs)
 
         # Heuristics for slot completion
-        if any(k in text for k in ["day", "days", "week", "weeks", "month", "months", "year", "years", "hour", "hours"]):
+        if any(k in text for k in ["day", "days", "week", "weeks", "month", "months", "year", "years", "hour", "hours", "since", "for "]):
             answered.add("duration")
         if any(k in text for k in ["mild", "moderate", "severe"]) or any(k in text for k in ["1/10", "2/10","3/10","4/10","5/10","6/10","7/10","8/10","9/10","10/10"]) or "out of 10" in text:
             answered.add("severity")
-        if any(k in text for k in ["associated", "along with", "also", "in addition", "other symptoms"]):
+        if any(k in text for k in ["associated", "along with", "also", "in addition", "other symptoms", "and", "plus"]):
             answered.add("associated")
-        if "temperature" in text or any(k in text for k in ["°c", "°f", "fever of", "temp", "measured my temperature", "my temp"]):
+        if "temperature" in text or any(k in text for k in ["°c", "°f", "fever of", "temp", "measured my temperature", "my temp", "was 3", "was 1"]):
             answered.add("temperature")
-        if any(k in text for k in ["pain in", "hurts in", "located", "location", "at my", "on my", "my pain is in"]):
+        if any(k in text for k in ["pain in", "hurts in", "located", "location", "at my", "on my", "my pain is in", "where the pain"]):
             answered.add("pain_location")
 
         return answered
 
     def _needs_temperature(self, history: List[Message], current_user_text: str) -> bool:
         text = (current_user_text or "").lower() + " " + " ".join(
-            [m.content.lower() for m in history if m.role == "user"][-4:]
+            [m.content.lower() for m in history if m.role == "user"][-6:]
         )
-        return ("fever" in text)
+        return ("fever" in text or "temperature" in text or "temp" in text)
 
     def _needs_pain_location(self, history: List[Message], current_user_text: str) -> bool:
         text = (current_user_text or "").lower() + " " + " ".join(
-            [m.content.lower() for m in history if m.role == "user"][-4:]
+            [m.content.lower() for m in history if m.role == "user"][-6:]
         )
         return ("pain" in text)
 
@@ -104,32 +106,47 @@ class PatientAgent:
         asked = set(explicit_asked) | set(inferred_asked)
         answered = set(explicit_answered) | set(inferred_answered)
 
+        # If the current turn contains answers to any outstanding asked slots, mark them answered
+        if "duration" in asked and "duration" not in answered and any(k in lower for k in ["day", "week", "month", "year", "hour", "since", "for "]):
+            answered.add("duration")
+        if "severity" in asked and "severity" not in answered and (any(k in lower for k in ["mild","moderate","severe"]) or "out of 10" in lower or any(x in lower for x in ["1/10","2/10","3/10","4/10","5/10","6/10","7/10","8/10","9/10","10/10"])):
+            answered.add("severity")
+        if "associated" in asked and "associated" not in answered and any(k in lower for k in ["also","in addition","other symptoms","along with","and","plus"]):
+            answered.add("associated")
+        if "temperature" in asked and "temperature" not in answered and any(k in lower for k in ["temperature","temp","°c","°f","fever of","was "]):
+            answered.add("temperature")
+        if "pain_location" in asked and "pain_location" not in answered and any(k in lower for k in ["in my","at my","on my","located","location","where"]):
+            answered.add("pain_location")
+
         # Conditional needs
         needs_temp = self._needs_temperature(history, user_text)
         needs_pain_loc = self._needs_pain_location(history, user_text)
 
-        # Base slots: duration, severity, associated
-        if "duration" not in asked and "duration" not in answered:
-            prompts.append(f"{self.SLOT_MARKERS['duration']} How long have you had these symptoms?")
-            asked.add("duration")
-        if "severity" not in asked and "severity" not in answered:
-            prompts.append(f"{self.SLOT_MARKERS['severity']} How severe are they (mild/moderate/severe or 1-10)?")
-            asked.add("severity")
-        if "associated" not in asked and "associated" not in answered:
-            prompts.append(f"{self.SLOT_MARKERS['associated']} Any other associated symptoms?")
-            asked.add("associated")
+        # If triage already complete from previous turns, avoid any question prompts
+        triage_done_before = self._triage_complete(answered=answered, asked=asked, needs_temp=needs_temp, needs_pain_loc=needs_pain_loc)
+        if not triage_done_before:
+            # Base slots: duration, severity, associated
+            if "duration" not in asked and "duration" not in answered:
+                prompts.append(f"{self.SLOT_MARKERS['duration']} How long have you had these symptoms?")
+                asked.add("duration")
+            if "severity" not in asked and "severity" not in answered:
+                prompts.append(f"{self.SLOT_MARKERS['severity']} How severe are they (mild/moderate/severe or 1-10)?")
+                asked.add("severity")
+            if "associated" not in asked and "associated" not in answered:
+                prompts.append(f"{self.SLOT_MARKERS['associated']} Any other associated symptoms?")
+                asked.add("associated")
 
-        # Conditional slots
-        if needs_temp and "temperature" not in asked and "temperature" not in answered and "temperature" not in lower:
-            prompts.append(f"{self.SLOT_MARKERS['temperature']} Have you measured your temperature? What was it?")
-            asked.add("temperature")
-        if needs_pain_loc and "pain_location" not in asked and "pain_location" not in answered and "location" not in lower:
-            prompts.append(f"{self.SLOT_MARKERS['pain_location']} Where exactly is the pain located?")
-            asked.add("pain_location")
+            # Conditional slots
+            if needs_temp and "temperature" not in asked and "temperature" not in answered and not any(k in lower for k in ["temperature","temp","°c","°f"]):
+                prompts.append(f"{self.SLOT_MARKERS['temperature']} Have you measured your temperature? What was it?")
+                asked.add("temperature")
+            if needs_pain_loc and "pain_location" not in asked and "pain_location" not in answered and not any(k in lower for k in ["location","located","in my","on my","at my"]):
+                prompts.append(f"{self.SLOT_MARKERS['pain_location']} Where exactly is the pain located?")
+                asked.add("pain_location")
 
         triage_done = self._triage_complete(answered=answered, asked=asked, needs_temp=needs_temp, needs_pain_loc=needs_pain_loc)
 
-        if prompts:
+        if prompts and not triage_done:
             # Friendly preamble + join prompts
             text_out = "Thanks for the details. " + " ".join(prompts)
         else:
