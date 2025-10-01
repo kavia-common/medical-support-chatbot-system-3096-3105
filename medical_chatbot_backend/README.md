@@ -68,6 +68,13 @@ Ensure the React app has `REACT_APP_API_BASE_URL=http://localhost:8000` in its `
 See `.env.example`:
 - `PROJECT_NAME` (default: medical_chatbot_backend)
 - `CORS_ALLOW_ORIGINS` (default: http://localhost:3000)
+  - Comma-separated list of allowed origins for CORS.
+  - Include your frontend origin(s). For Kavia cloud preview, add:
+    `https://vscode-internal-30348-beta.beta01.cloud.kavia.ai:4000`
+  - Example:
+    ```
+    CORS_ALLOW_ORIGINS=http://localhost:3000,https://vscode-internal-30348-beta.beta01.cloud.kavia.ai:4000
+    ```
 - `EMBEDDING_MODEL` (demo default: mock-embedder)
 - `VECTOR_DIM` (default: 384)
 

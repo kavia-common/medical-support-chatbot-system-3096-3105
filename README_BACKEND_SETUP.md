@@ -16,6 +16,9 @@ pip install -r requirements.txt
 ```bash
 cp .env.example .env
 # Edit .env if needed
+# Ensure CORS_ALLOW_ORIGINS includes your frontend origin(s).
+# For Kavia cloud preview, include:
+# CORS_ALLOW_ORIGINS=http://localhost:3000,https://vscode-internal-30348-beta.beta01.cloud.kavia.ai:4000
 ```
 
 3) Start the FastAPI server:
