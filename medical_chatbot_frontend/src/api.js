@@ -90,6 +90,21 @@ export async function apiHealthCheck() {
   }
 }
 
+// PUBLIC_INTERFACE
+export async function fetchExpert(sessionId) {
+  const url = apiUrl(`/api/chat/${encodeURIComponent(sessionId)}/expert`);
+  try {
+    const res = await fetch(url, { method: 'GET' });
+    if (!res.ok) {
+      return { ok: false, status: res.status, url, data: [], message: `Expert fetch failed (${res.status})` };
+    }
+    const data = await res.json();
+    return { ok: true, status: res.status, url, data: Array.isArray(data) ? data : [] };
+  } catch (e) {
+    return { ok: false, status: 0, url, data: [], message: e?.message || 'Network error during expert fetch' };
+  }
+}
+
 // Helpful diagnostic log once at module load (non-fatal)
 try {
   // eslint-disable-next-line no-console

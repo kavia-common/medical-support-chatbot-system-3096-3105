@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import './index.css';
-import { API_BASE_URL as API_BASE, apiUrl, apiHealthCheck } from './api';
+import { API_BASE_URL as API_BASE, apiUrl, apiHealthCheck, fetchExpert } from './api';
 
 /**
  * Theme constants aligned to "Ocean Professional"
@@ -378,6 +378,8 @@ function App() {
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
+  const [expertAvailable, setExpertAvailable] = useState(false);
+  const [expertTried, setExpertTried] = useState(false);
 
   // Derived structured suggestions parsed from recommendations
   const structured = useMemo(() => parseStructuredItems(recommendations), [recommendations]);
@@ -434,11 +436,23 @@ function App() {
   const handleSelectSession = async (s) => {
     setError('');
     setLoading(true);
+    setExpertAvailable(false);
+    setExpertTried(false);
     try {
       const data = await getSession(s.id);
-      setSessionId(data.id || s.id);
+      const sid = data.id || s.id;
+      setSessionId(sid);
       setMessages(Array.isArray(data.messages) ? data.messages : []);
-      setRecommendations(Array.isArray(data.recommendations) ? data.recommendations : []);
+      // Always attempt to fetch expert and merge with standard
+      let merged = Array.isArray(data.recommendations) ? [...data.recommendations] : [];
+      const expert = await fetchExpert(sid);
+      setExpertTried(true);
+      if (expert.ok && Array.isArray(expert.data) && expert.data.length) {
+        setExpertAvailable(true);
+        // Merge by concatenation; parseStructuredItems will dedupe headings/content
+        merged = [...merged, ...expert.data];
+      }
+      setRecommendations(merged);
     } catch (e) {
       setError(e.message || 'Failed to load session');
     } finally {
@@ -449,13 +463,24 @@ function App() {
   const handleSend = async (text) => {
     setError('');
     setLoading(true);
+    setExpertAvailable(false);
+    setExpertTried(false);
     const optimisticUser = { role: 'user', content: text, timestamp: new Date().toISOString() };
     setMessages((prev) => [...prev, optimisticUser]);
     try {
       const data = await sendMessage({ sessionId, message: text });
-      setSessionId(data.id || data.session_id || sessionId);
+      const sid = data.id || data.session_id || sessionId;
+      setSessionId(sid);
       setMessages(Array.isArray(data.messages) ? data.messages : []);
-      setRecommendations(Array.isArray(data.recommendations) ? data.recommendations : []);
+      // Merge inline recommendations with expert endpoint results
+      let merged = Array.isArray(data.recommendations) ? [...data.recommendations] : [];
+      const expert = await fetchExpert(sid);
+      setExpertTried(true);
+      if (expert.ok && Array.isArray(expert.data) && expert.data.length) {
+        setExpertAvailable(true);
+        merged = [...merged, ...expert.data];
+      }
+      setRecommendations(merged);
       // refresh history
       getHistory().then((h) => setSessions(Array.isArray(h) ? h : [])).catch(() => {});
     } catch (e) {
@@ -481,6 +506,19 @@ function App() {
           <aside className="side-panel" aria-label="Side panel with history and recommendations">
             <div className="side-scroll">
               <HistoryList sessions={sessions} onSelect={handleSelectSession} />
+              {/* Expert enhancement indicator */}
+              {expertTried ? (
+                <div className="card" aria-live="polite">
+                  <div className="card-header">
+                    {expertAvailable ? 'Expert suggestions enabled' : 'Expert suggestions unavailable'}
+                  </div>
+                  <div className="card-body" style={{ color: expertAvailable ? THEME.text : THEME.error }}>
+                    {expertAvailable
+                      ? 'Enhanced tests and medicine suggestions are shown below.'
+                      : 'Expert endpoint returned no data. If you recently updated the backend, please restart the FastAPI server and reload this page.'}
+                  </div>
+                </div>
+              ) : null}
               {/* Structured recommendation sections */}
               <RecommendationCard title="Suggested Tests / Checks" items={structured.tests} />
               <RecommendationCard title="Suggested Medicines" items={structured.medicines} />
