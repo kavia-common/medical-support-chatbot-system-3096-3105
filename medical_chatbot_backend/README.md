@@ -83,6 +83,20 @@ See `.env.example`:
 - This project is for demonstration and educational purposes only.
 - No data is persisted across server restarts.
 - The RAG component is a mock: deterministic pseudo-embeddings + in-memory vector index.
+- PatientAgent and MedicalAgent now use session-scoped memory to avoid repeating questions and to gate medicine suggestions until triage is complete.
+
+## Tests
+
+Run unit tests (if pytest available):
+
+```bash
+cd medical_chatbot_backend
+pytest -q
+```
+
+Tests validate:
+- PatientAgent does not repeat questions across turns and marks triage completion.
+- MedicalAgent withholds medicine suggestions until triage is complete, then includes them with a disclaimer.
 
 ## Container name
 

@@ -30,10 +30,15 @@ class MedicalAgent:
         return meds
 
     # PUBLIC_INTERFACE
-    def recommend(self, user_query: str, k: int = 3) -> List[str]:
+    def recommend(self, user_query: str, k: int = 3, allow_meds: bool = True) -> List[str]:
         """
         Retrieve relevant guideline snippets and transform them into user-facing recommendations.
         Always includes a strong disclaimer. Adds brief medicine suggestions when appropriate.
+
+        Args:
+            user_query: Combined user utterances used to search and tailor suggestions.
+            k: Number of guideline snippets to retrieve.
+            allow_meds: If False, medicine suggestions are withheld until triage completion.
         """
         results = self.store.query(user_query, k=k)
         recs: List[str] = []
@@ -43,10 +48,11 @@ class MedicalAgent:
                 continue
             recs.append(text)
 
-        # Add minimal heuristic medicine suggestions if relevant to query
-        med_suggestions = self._medicine_suggestions(user_query)
-        if med_suggestions:
-            recs.extend(med_suggestions)
+        # Add minimal heuristic medicine suggestions if relevant to query AND allowed
+        if allow_meds:
+            med_suggestions = self._medicine_suggestions(user_query)
+            if med_suggestions:
+                recs.extend(med_suggestions)
 
         # Add explicit disclaimer as final entry
         recs.append(DISLCAIMER_TEXT)

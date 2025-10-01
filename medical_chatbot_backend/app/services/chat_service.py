@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set, Any
 
 from ..models.schemas import ChatSession, Message
 from ..agents.patient_agent import PatientAgent
@@ -22,12 +22,27 @@ def _strip_slot_markers(text: str) -> str:
 class ChatService:
     """
     In-memory chat session manager. For demo purposes.
+    Also keeps per-session memory for asked/answered slots and triage completion
+    to avoid repeating questions and to gate medicine suggestions until triage is complete.
     """
 
     def __init__(self):
         self.sessions: Dict[str, ChatSession] = {}
         self.patient_agent = PatientAgent()
         self.medical_agent = MedicalAgent()
+        # Session memory keyed by session id
+        self.session_state: Dict[str, Dict[str, Any]] = {}
+
+    def _ensure_state(self, sid: str) -> Dict[str, Any]:
+        state = self.session_state.get(sid)
+        if not state:
+            state = {
+                "asked_slots": set(),       # type: Set[str]
+                "answered_slots": set(),    # type: Set[str]
+                "triage_complete": False,   # type: bool
+            }
+            self.session_state[sid] = state
+        return state
 
     # PUBLIC_INTERFACE
     def list_sessions(self) -> List[ChatSession]:
@@ -43,7 +58,8 @@ class ChatService:
     def handle_message(self, session_id: Optional[str], user_text: str) -> ChatSession:
         """
         Process a user message. Create a session if needed, append user message,
-        have PatientAgent respond, and fetch MedicalAgent recommendations.
+        and have PatientAgent respond.
+        Session-level memory is passed to PatientAgent to prevent repeated questions.
         """
         now = datetime.utcnow()
         if not session_id or session_id not in self.sessions:
@@ -60,13 +76,23 @@ class ChatService:
             session = self.sessions[session_id]
             session.updated_at = now
 
+        # Ensure state exists
+        state = self._ensure_state(session.id)
+
         # Add user message
         session.messages.append(
             Message(role="user", content=user_text, timestamp=now)
         )
 
-        # PatientAgent response
-        reply_text = self.patient_agent.respond(session.messages, user_text)
+        # PatientAgent response with stateful slot tracking
+        reply_text, updated_state = self.patient_agent.respond(
+            session.messages, user_text, asked_slots=set(state["asked_slots"]), answered_slots=set(state["answered_slots"])
+        )
+        # Update state from patient agent (asked/answered/triage_complete)
+        state["asked_slots"] = set(updated_state.get("asked_slots", set()))
+        state["answered_slots"] = set(updated_state.get("answered_slots", set()))
+        state["triage_complete"] = bool(updated_state.get("triage_complete", False))
+
         # Store assistant message but strip markers for user-facing display
         clean_reply = _strip_slot_markers(reply_text)
         session.messages.append(
@@ -77,15 +103,17 @@ class ChatService:
         if not session.title:
             session.title = user_text[:50]
 
-        # Recommendations via MedicalAgent
         return session
 
     # PUBLIC_INTERFACE
     def recommendations_for(self, session: ChatSession) -> List[str]:
         """
         Generate recommendations for the latest context by combining the last few user queries.
-        This increases contextual relevance for the simple vector search.
+        Medicine suggestions are only provided if triage is marked complete for this session.
         """
+        state = self.session_state.get(session.id, {})
+        triage_complete = bool(state.get("triage_complete", False))
+
         # Combine last N user utterances (e.g., 3) for a richer query
         last_user_texts = [m.content for m in session.messages if m.role == "user"][-3:]
         if not last_user_texts:
@@ -95,4 +123,4 @@ class ChatService:
         else:
             query = " ".join(last_user_texts)
 
-        return self.medical_agent.recommend(query or "general")
+        return self.medical_agent.recommend(query or "general", allow_meds=triage_complete)
