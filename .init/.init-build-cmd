@@ -1,0 +1,4 @@
+{
+    "command": "npm install && npx tsc --noEmit && npm test -- --ci",
+    "working_directory": "/home/kavia/workspace/code-generation/medical-support-chatbot-system-3096-3105/medical_chatbot_frontend"
+}
