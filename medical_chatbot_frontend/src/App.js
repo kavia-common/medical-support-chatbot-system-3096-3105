@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import './index.css';
+import { API_BASE_URL as API_BASE, apiUrl } from './api';
 
 /**
  * Theme constants aligned to "Ocean Professional"
@@ -15,11 +16,6 @@ const THEME = {
 };
 
 /**
- * Utility: Read API base URL from environment
- */
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
-
-/**
  * PUBLIC_INTERFACE
  * buildApiUrl
  * Constructs a URL to the backend REST endpoint.
@@ -27,8 +23,7 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '';
  * - params: optional query params object
  */
 export function buildApiUrl(path, params) {
-  const base = API_BASE_URL.replace(/\/+$/, '');
-  const full = `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  const full = apiUrl(path);
   if (!params) return full;
   const usp = new URLSearchParams(params);
   return `${full}?${usp.toString()}`;
@@ -140,31 +135,57 @@ function HistoryList({ sessions = [], onSelect }) {
  * - POST /api/chat -> { session_id?, message } => returns { id, messages, recommendations }
  */
 function useApi() {
-  const base = API_BASE_URL;
+  const base = API_BASE;
+
+  const ensureConfigured = () => {
+    if (!base) {
+      throw new Error(
+        'API base URL is not configured. Please create medical_chatbot_frontend/.env and set REACT_APP_API_BASE_URL (e.g., http://localhost:8000).'
+      );
+    }
+  };
 
   const getHistory = async () => {
+    ensureConfigured();
     const url = buildApiUrl('/api/chat/history');
-    const res = await fetch(url);
+    let res;
+    try {
+      res = await fetch(url);
+    } catch (e) {
+      throw new Error(`Network error while fetching history. Verify backend is running at ${base}.`);
+    }
     if (!res.ok) throw new Error(`Failed to fetch history (${res.status})`);
     return res.json();
   };
 
   const getSession = async (sessionId) => {
+    ensureConfigured();
     const url = buildApiUrl(`/api/chat/${encodeURIComponent(sessionId)}`);
-    const res = await fetch(url);
+    let res;
+    try {
+      res = await fetch(url);
+    } catch (e) {
+      throw new Error(`Network error while fetching session. Verify backend is running at ${base}.`);
+    }
     if (!res.ok) throw new Error(`Failed to fetch session (${res.status})`);
     return res.json();
   };
 
   const sendMessage = async ({ sessionId, message }) => {
+    ensureConfigured();
     const url = buildApiUrl('/api/chat');
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ session_id: sessionId || null, message }),
-    });
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ session_id: sessionId || null, message }),
+      });
+    } catch (e) {
+      throw new Error(`Network error while sending message. Verify backend is running at ${base}.`);
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new Error(`Failed to send message (${res.status}): ${text}`);
