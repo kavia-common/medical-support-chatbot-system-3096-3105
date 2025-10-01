@@ -25,6 +25,10 @@ class ChatService:
     In-memory chat session manager. For demo purposes.
     Also keeps per-session memory for asked/answered slots and triage completion
     to avoid repeating questions and to gate medicine suggestions until triage is complete.
+
+    RAG linkage:
+    - Builds a symptom-rich query from conversation and slot state to ensure that both
+      MedicalAgent and ClinicalAgent retrieval is explicitly tied to the user's relevant symptoms.
     """
 
     def __init__(self):
@@ -118,43 +122,77 @@ class ChatService:
 
         return session
 
+    def _build_rag_context(self, session: ChatSession) -> str:
+        """
+        Build a symptom-rich RAG query using:
+        - Recent user utterances
+        - Detected slot state (asked/answered) to bias context (e.g., fever -> include temperature)
+        - Simple symptom keyphrase detection from full history
+        This ensures guideline retrieval is tightly linked to the user's relevant symptoms.
+        """
+        # Recent user messages
+        last_users = [m.content for m in session.messages if m.role == "user"][-5:]
+        recent = " ".join(last_users)
+
+        # Full-text user history for additional hints
+        user_hist = " ".join([m.content for m in session.messages if m.role == "user"]).lower()
+
+        # Pull current session slot state if any
+        st = self.session_state.get(session.id, {})
+        answered = set(st.get("answered_slots") or [])
+        asked = set(st.get("asked_slots") or [])
+
+        # Heuristic symptom flags from history (kept minimal, deterministic)
+        flags = []
+        if any(k in user_hist for k in ["fever", "temperature", "temp"]):
+            flags.append("symptom:fever")
+            if "temperature" in answered:
+                flags.append("answered:temperature")
+        if any(k in user_hist for k in ["cough"]):
+            flags.append("symptom:cough")
+        if any(k in user_hist for k in ["chest pain", "chest tightness"]):
+            flags.append("symptom:chest_pain")
+            if "pain_location" in answered or "pain_location" in asked:
+                flags.append("context:pain_location_known_or_asked")
+        if any(k in user_hist for k in ["headache"]):
+            flags.append("symptom:headache")
+        if any(k in user_hist for k in ["nausea"]):
+            flags.append("symptom:nausea")
+        if any(k in user_hist for k in ["shortness of breath", "dyspnea"]):
+            flags.append("symptom:shortness_of_breath")
+
+        # Include core triage slots to bias retrieval if present
+        if "duration" in answered:
+            flags.append("answered:duration")
+        if "severity" in answered:
+            flags.append("answered:severity")
+        if "associated" in answered:
+            flags.append("answered:associated")
+
+        # Create a compact, explicit query – recent context + normalized flags
+        normalized_flags = " ".join(sorted(set(flags)))
+        query = f"{recent} || {normalized_flags}".strip()
+        return query or user_hist or "general"
+
     # PUBLIC_INTERFACE
     def recommendations_for(self, session: ChatSession) -> List[str]:
         """
-        Generate recommendations for the latest context by combining the last few user queries.
+        Generate recommendations for the latest context using a symptom-rich query.
         Medicine suggestions are only provided if triage is marked complete for this session.
         """
         state = self.session_state.get(session.id, {})
         triage_complete = bool(state.get("triage_complete", False))
 
-        # Combine last N user utterances (e.g., 3) for a richer query
-        last_user_texts = [m.content for m in session.messages if m.role == "user"][-3:]
-        if not last_user_texts:
-            # Fallback to last assistant/user if user is missing
-            last_user = next((m for m in reversed(session.messages) if m.role == "user"), None)
-            query = last_user.content if last_user else (session.messages[-1].content if session.messages else "")
-        else:
-            query = " ".join(last_user_texts)
+        # Build explicit symptom-aware query for RAG
+        query = self._build_rag_context(session)
 
         return self.medical_agent.recommend(query or "general", allow_meds=triage_complete)
 
-    # PUBLIC_INTERFACE
     def recommendations_expert_for(self, session: ChatSession) -> List[str]:
         """
-        Generate expert-style recommendations using the ClinicalAgent.
-
-        Notes:
-            - This call ignores the triage gate for medicines because ClinicalAgent is designed
-              to produce an expert bundle; however, you may choose to respect triage by modifying
-              this method if desired.
-            - Returns a flattened list of suggestions suitable for the existing frontend's
-              recommendations panel.
+        Generate expert-style recommendations using the ClinicalAgent with the same
+        symptom-rich context to tightly couple tests/medicines to user symptoms and
+        retrieved guidelines.
         """
-        # Use the same query construction as recommendations_for
-        last_user_texts = [m.content for m in session.messages if m.role == "user"][-3:]
-        if not last_user_texts:
-            last_user = next((m for m in reversed(session.messages) if m.role == "user"), None)
-            query = last_user.content if last_user else (session.messages[-1].content if session.messages else "")
-        else:
-            query = " ".join(last_user_texts)
+        query = self._build_rag_context(session)
         return self.clinical_agent.recommend(query or "general")

@@ -61,14 +61,14 @@ class MedicalAgent:
 
         recs: List[str] = []
         if core:
-            recs.append("Contextual guidance:")
+            recs.append("Contextual guidance (linked to your symptoms):")
             recs.extend(core[:3])
 
         # Add minimal heuristic medicine suggestions if relevant to query AND allowed
         if allow_meds:
             med_suggestions = self._medicine_suggestions(user_query)
             if med_suggestions:
-                recs.append("Possible OTC/support (if appropriate):")
+                recs.append("Possible OTC/support (symptom-linked, if appropriate):")
                 recs.extend(med_suggestions[:3])
 
         # Remove duplicates while preserving ordering and trim to a reasonable size

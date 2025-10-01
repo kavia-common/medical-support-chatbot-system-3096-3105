@@ -19,63 +19,71 @@ class ClinicalAgent:
 
     def _extract_tests(self, user_query: str, retrieved_texts: List[str]) -> List[str]:
         """
-        Heuristic extraction/creation of likely tests from the query and retrieved guideline texts.
-        The logic is intentionally simple for demo purposes.
+        Heuristic extraction of tests explicitly linked to symptoms and guideline retrieval.
+        Produces items with name + purpose/use-case + safety/escalation when relevant.
         """
         q = (user_query or "").lower()
         tests: List[str] = []
 
-        # Chest pain patterns
-        if "chest pain" in q or "chest tightness" in q:
-            tests.extend([
-                "Consider ECG (electrocardiogram) as an initial test.",
-                "Consider troponin levels if clinically indicated.",
-                "Chest X-ray may be considered where appropriate.",
-                "If red flags (severe pain, dyspnea, syncope), seek urgent in-person evaluation."
-            ])
+        # Simple symptom flags
+        has_chest_pain = ("chest pain" in q) or ("chest tightness" in q)
+        has_cough = ("cough" in q)
+        has_fever = ("fever" in q or "temperature" in q or "temp" in q)
+        has_sob = ("shortness of breath" in q) or ("dyspnea" in q)
 
-        # Fever/cough patterns
-        if "fever" in q or "cough" in q:
-            tests.append("Check temperature and monitor duration/severity of fever.")
-            # Encourage pulse oximetry when respiratory symptoms present
-            if "cough" in q or "shortness of breath" in q:
-                tests.append("If available, check oxygen saturation with a pulse oximeter; seek care if < 92% or worsening.")
-
-        # Look for hints in retrieved texts (very basic keyword spotting)
+        # Tie to guidelines by scanning retrieved
         joined = " ".join(rt.lower() for rt in retrieved_texts)
-        if "chest x-ray" in joined and "chest x-ray" not in [t.lower() for t in tests]:
-            tests.append("Chest X-ray may aid evaluation based on symptoms and local practice.")
-        if "ecg" in joined and not any("ecg" in t.lower() for t in tests):
-            tests.append("ECG can be part of initial assessment for chest pain.")
-        if "troponin" in joined and not any("troponin" in t.lower() for t in tests):
-            tests.append("High-sensitivity troponin testing when indicated, per local protocols.")
+        g_has_ecg = "ecg" in joined
+        g_has_trop = "troponin" in joined
+        g_has_cxr = "chest x-ray" in joined or "x-ray" in joined or "chest xray" in joined
+        g_has_sat = "saturation" in joined or "oxygen" in joined or "oximeter" in joined
+
+        # Chest pain-focused tests
+        if has_chest_pain or g_has_ecg or g_has_trop or g_has_cxr:
+            if has_chest_pain or g_has_ecg:
+                tests.append("Test: ECG (electrocardiogram) — Use-case: Initial assessment for chest pain. Safety/escalation: If severe pain, syncope, or persistent symptoms, seek urgent in-person evaluation.")
+            if has_chest_pain or g_has_trop:
+                tests.append("Test: High-sensitivity troponin — Use-case: Assess myocardial injury when indicated. Safety: Follow local protocols; abnormal results need clinical evaluation.")
+            if has_chest_pain or g_has_cxr:
+                tests.append("Test: Chest X-ray — Use-case: Evaluate for pulmonary or structural causes when appropriate. Safety: Radiation exposure minimal; use per clinical guidance.")
+
+        # Fever/cough/respiratory symptom checks
+        if has_fever:
+            tests.append("Check: Temperature — Use-case: Track fever trends and response to antipyretics. Safety: Follow dosing limits if using antipyretics.")
+        if has_cough or has_sob or g_has_sat:
+            tests.append("Check: Pulse oximetry (SpO2) — Use-case: Assess oxygen saturation in respiratory symptoms. Escalation: Seek care if < 92% or worsening.")
 
         return tests
 
     def _extract_medicines(self, user_query: str, retrieved_texts: List[str]) -> List[str]:
         """
-        Heuristic medicine/supportive care suggestions with safety caveats.
+        Heuristic medicines/supportive care with explicit name, use-case, dosing/safety.
+        Driven by symptom context and guideline keywords.
         """
         q = (user_query or "").lower()
         meds: List[str] = []
 
-        if "fever" in q or "temperature" in q:
-            meds.append("Over-the-counter antipyretic: acetaminophen (paracetamol), follow package dosing; never exceed max daily dose.")
-            meds.append("Ibuprofen may be considered if appropriate; avoid with certain kidney, ulcer, or bleeding risks; take with food.")
+        has_fever = ("fever" in q or "temperature" in q or "temp" in q)
+        has_pain = ("pain" in q or "headache" in q)
+        has_cough = ("cough" in q)
 
-        if "pain" in q or "headache" in q:
-            meds.append("For mild to moderate pain/headache: acetaminophen as first-line; consider ibuprofen if appropriate.")
-
-        if "cough" in q:
-            meds.append("Hydration and throat lozenges may help cough. Consider simple cough suppressants per local guidance (short-term).")
-            meds.append("Honey can help soothe cough (not for children under 1 year).")
-
-        # Also scan retrieved for supportive care hints
         joined = " ".join(retrieved_texts).lower()
+
+        if has_fever or "antipyretic" in joined or "acetaminophen" in joined:
+            meds.append("Medicine: Acetaminophen (paracetamol) — Use-case: Fever reduction and mild pain. Dosing: Follow package label; never exceed max daily dose. Safety: Avoid combining multiple acetaminophen-containing products.")
+        if (has_fever or has_pain) or "ibuprofen" in joined:
+            meds.append("Medicine: Ibuprofen (NSAID) — Use-case: Pain or fever (if appropriate). Dosing: Use lowest effective dose with food. Safety: Avoid with certain kidney disease, ulcers, or bleeding risks; consider drug interactions.")
+        if has_pain and "acetaminophen" not in " ".join(meds).lower():
+            meds.append("Medicine: Acetaminophen — Use-case: First-line for mild to moderate pain/headache. Dosing/Safety: As above; heed max daily dose.")
+        if has_cough or "cough" in joined:
+            meds.append("Support: Hydration and throat lozenges — Use-case: Symptomatic cough relief. Safety: Lozenges per label; avoid choking risk in children.")
+            meds.append("Support: Honey (not for <1 year) — Use-case: Soothe cough. Safety: Do not give honey to infants.")
+            meds.append("Option: Simple cough suppressant (short-term) — Use-case: Troublesome cough per local guidance. Safety: Follow label; avoid duplication of active ingredients.")
+
         if "hydration" in joined and not any("hydration" in m.lower() for m in meds):
-            meds.append("Maintain adequate hydration and rest.")
+            meds.append("Support: Adequate hydration and rest — Use-case: General recovery support. Safety: As tolerated.")
         if "rest" in joined and not any("rest" in m.lower() for m in meds):
-            meds.append("Ensure adequate rest while recovering.")
+            meds.append("Support: Rest — Use-case: Recovery; monitor symptoms. Safety: Seek care if worsening.")
 
         return meds
 
@@ -118,12 +126,29 @@ class ClinicalAgent:
         tests = self._dedupe(self._extract_tests(user_query, retrieved_texts))
         meds = self._dedupe(self._extract_medicines(user_query, retrieved_texts))
 
+        # Provide explicit linkage justification
+        linkage: List[str] = []
+        uq = (user_query or "").lower()
+        if any(k in uq for k in ["fever", "temperature", "temp"]):
+            linkage.append("Reasoning: Fever-related suggestions included based on your reported fever/temperature.")
+        if any(k in uq for k in ["cough"]):
+            linkage.append("Reasoning: Cough-related guidance included due to your cough symptoms.")
+        if any(k in uq for k in ["chest pain", "chest tightness"]):
+            linkage.append("Reasoning: Chest pain pattern detected; tests aligned with guideline mentions (ECG, troponin, CXR).")
+        if any(k in uq for k in ["headache", "nausea"]):
+            linkage.append("Reasoning: Headache/nausea were noted; general supportive guidance included.")
+
+        # Contextual notes include top guideline snippets to justify recommendations
         notes: List[str] = []
-        # Include up to top 2 retrieved items as contextual notes (optional, trimmed)
         if retrieved_texts:
-            notes.append("Contextual notes:")
+            notes.append("Contextual notes (from guidelines):")
         for text in retrieved_texts[:2]:
             notes.append(text)
+
+        # Add reasoning lines
+        if linkage:
+            notes.insert(0, "Selection rationale:")
+            notes = linkage + notes
 
         # Always include disclaimer at the end
         notes.append(DISLCAIMER_TEXT)
