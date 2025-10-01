@@ -128,13 +128,17 @@ class ChatService:
         - Recent user utterances
         - Detected slot state (asked/answered) to bias context (e.g., fever -> include temperature)
         - Simple symptom keyphrase detection from full history
-        This ensures guideline retrieval is tightly linked to the user's relevant symptoms.
+
+        Design note:
+        The resulting query is the sole source used by MedicalAgent/ClinicalAgent retrieval.
+        By embedding explicit "symptom:*" and "answered:*" flags, we force the vector search
+        to be symptom/context driven and avoid generic retrieval when symptoms are not present.
         """
-        # Recent user messages
+        # Recent user messages (keep deterministic window)
         last_users = [m.content for m in session.messages if m.role == "user"][-5:]
         recent = " ".join(last_users)
 
-        # Full-text user history for additional hints
+        # Full-text user history for additional hints (normalized lower-case)
         user_hist = " ".join([m.content for m in session.messages if m.role == "user"]).lower()
 
         # Pull current session slot state if any
@@ -142,23 +146,23 @@ class ChatService:
         answered = set(st.get("answered_slots") or [])
         asked = set(st.get("asked_slots") or [])
 
-        # Heuristic symptom flags from history (kept minimal, deterministic)
+        # Heuristic symptom flags from history (kept minimal and deterministic)
         flags = []
         if any(k in user_hist for k in ["fever", "temperature", "temp"]):
             flags.append("symptom:fever")
             if "temperature" in answered:
                 flags.append("answered:temperature")
-        if any(k in user_hist for k in ["cough"]):
+        if "cough" in user_hist:
             flags.append("symptom:cough")
-        if any(k in user_hist for k in ["chest pain", "chest tightness"]):
+        if ("chest pain" in user_hist) or ("chest tightness" in user_hist):
             flags.append("symptom:chest_pain")
             if "pain_location" in answered or "pain_location" in asked:
                 flags.append("context:pain_location_known_or_asked")
-        if any(k in user_hist for k in ["headache"]):
+        if "headache" in user_hist:
             flags.append("symptom:headache")
-        if any(k in user_hist for k in ["nausea"]):
+        if "nausea" in user_hist:
             flags.append("symptom:nausea")
-        if any(k in user_hist for k in ["shortness of breath", "dyspnea"]):
+        if ("shortness of breath" in user_hist) or ("dyspnea" in user_hist):
             flags.append("symptom:shortness_of_breath")
 
         # Include core triage slots to bias retrieval if present

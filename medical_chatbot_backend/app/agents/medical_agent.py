@@ -7,6 +7,10 @@ class MedicalAgent:
     MedicalAgent uses simple RAG over a mock guidelines vector store to produce general recommendations.
     Adds light logic to include medicine suggestions for common cases (e.g., fever, pain),
     always with a strong disclaimer.
+
+    Tightening changes:
+    - Medicine suggestions are strictly tied to explicit symptom mentions in the (ChatService-built) query.
+    - No generic cough/pain/fever meds if respective symptom is not present in the query.
     """
 
     def __init__(self):
@@ -14,18 +18,26 @@ class MedicalAgent:
 
     def _medicine_suggestions(self, user_query: str) -> List[str]:
         """
-        Heuristic medicine suggestions with safety caveats.
+        Heuristic medicine/support suggestions with safety caveats.
+        Emitted only when corresponding symptom keywords are present in user_query.
         This is a demo; not medical advice.
         """
         q = (user_query or "").lower()
         meds: List[str] = []
-        if "fever" in q or "temperature" in q:
+
+        # Fever-linked
+        if "fever" in q or "temperature" in q or "temp" in q:
             meds.append("Over-the-counter antipyretic: acetaminophen (paracetamol), follow package dosing; avoid exceeding daily limits.")
             meds.append("Alternative (if appropriate for you): ibuprofen with food; avoid if you have certain kidney, ulcer, or bleeding risks.")
+
+        # Pain/headache-linked
         if "pain" in q or "headache" in q:
             meds.append("For mild to moderate pain or headache: acetaminophen as first-line; consider ibuprofen if appropriate for you.")
+
+        # Cough-linked
         if "cough" in q:
             meds.append("Hydration and throat lozenges may help. For bothersome cough, consider a simple cough suppressant as per local guidance.")
+
         # Keep medicines short and generic with safety warnings
         return meds
 
@@ -47,7 +59,7 @@ class MedicalAgent:
         Always includes a strong disclaimer. Adds brief medicine suggestions when appropriate.
 
         Args:
-            user_query: Combined user utterances used to search and tailor suggestions.
+            user_query: Combined user utterances used to search and tailor suggestions (built by ChatService).
             k: Number of guideline snippets to retrieve.
             allow_meds: If False, medicine suggestions are withheld until triage completion.
         """
