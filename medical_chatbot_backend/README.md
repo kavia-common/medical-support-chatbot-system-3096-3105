@@ -29,6 +29,13 @@ source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
 pip install -r requirements.txt
 ```
 
+Note on dependencies:
+- This backend pins Pydantic and pydantic-core versions to satisfy shelly-ai==0.1.4 requirements (pydantic==2.10.6, pydantic-core==2.27.2) and uses a compatible FastAPI version.
+- If you previously installed dependencies, please reinstall to apply the updated pins:
+  ```bash
+  pip install --upgrade --force-reinstall -r requirements.txt
+  ```
+
 2) Create `.env`:
 
 ```bash

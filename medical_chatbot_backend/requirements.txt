@@ -1,4 +1,15 @@
-fastapi==0.115.0
+# FastAPI backend dependencies
+# Note: shelly-ai==0.1.4 requires pydantic==2.10.6 and pydantic-core==2.27.2
+# We pin FastAPI to a version compatible with Pydantic 2.10.x.
+fastapi==0.115.4
 uvicorn[standard]==0.30.6
-pydantic==2.8.2
+
+# Pydantic pins to satisfy shelly-ai 0.1.4
+pydantic==2.10.6
+pydantic-core==2.27.2
+
+# Environment loading
 python-dotenv==1.0.1
+
+# shelly-ai library that imposes pydantic constraints
+shelly-ai==0.1.4
