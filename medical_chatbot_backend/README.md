@@ -1,9 +1,12 @@
 # CrewAI Medical Support - FastAPI Backend
 
-A modular FastAPI backend for a demo medical support chatbot with two agents:
+A modular FastAPI backend for a demo medical support chatbot with three agents:
 - PatientAgent: interactive symptom collection and note structuring (heuristic).
 - MedicalAgent: mock RAG over simple vectorized guidelines to produce general recommendations.
   - Strong disclaimer: "Recommendations are not medical advice"
+- ClinicalAgent: expert-style suggestions focused on diagnostic tests and medicines/support,
+  powered by the same guideline RAG with a structured output.
+  - Distinct from PatientAgent/MedicalAgent; can be invoked for expert output.
 
 This backend integrates with the provided React frontend via REST.
 
@@ -78,6 +81,37 @@ See `.env.example`:
 - `EMBEDDING_MODEL` (demo default: mock-embedder)
 - `VECTOR_DIM` (default: 384)
 
+## ClinicalAgent (Expert Suggestions)
+
+The ClinicalAgent provides targeted expert-style outputs:
+- Suggested tests/assessments (e.g., ECG, troponin, chest X-ray for chest pain)
+- Suggested OTC medicines/supportive care with safety caveats
+- Strong disclaimer included in every output
+
+Public interface:
+- suggest(user_query: str, k: int = 3) -> Dict[str, List[str]]
+  Returns {"tests": [...], "medicines": [...], "notes": ["...", "Recommendations are not medical advice..."]}
+
+- recommend(user_query: str, k: int = 3) -> List[str]
+  Returns a flattened list of suggestions (tests, medicines, notes) ending with the disclaimer.
+
+Example:
+```python
+from app.agents.clinical_agent import ClinicalAgent
+agent = ClinicalAgent()
+bundle = agent.suggest("I have chest pain and shortness of breath")
+# or flattened:
+flat = agent.recommend("I have fever and cough")
+```
+
+Integration:
+- ChatService now exposes:
+  - recommendations_expert_for(session: ChatSession) -> List[str]
+  which returns the flattened expert suggestions for the current session context.
+
+Notes:
+- For demo only. Not medical advice.
+- Uses the same in-memory guideline RAG as MedicalAgent.
 ## Notes
 
 - This project is for demonstration and educational purposes only.

@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Set, Any
 from ..models.schemas import ChatSession, Message
 from ..agents.patient_agent import PatientAgent
 from ..agents.medical_agent import MedicalAgent
+from ..agents.clinical_agent import ClinicalAgent
 
 def _strip_slot_markers(text: str) -> str:
     """
@@ -30,6 +31,7 @@ class ChatService:
         self.sessions: Dict[str, ChatSession] = {}
         self.patient_agent = PatientAgent()
         self.medical_agent = MedicalAgent()
+        self.clinical_agent = ClinicalAgent()
         # Session memory keyed by session id
         self.session_state: Dict[str, Dict[str, Any]] = {}
 
@@ -124,3 +126,24 @@ class ChatService:
             query = " ".join(last_user_texts)
 
         return self.medical_agent.recommend(query or "general", allow_meds=triage_complete)
+
+    # PUBLIC_INTERFACE
+    def recommendations_expert_for(self, session: ChatSession) -> List[str]:
+        """
+        Generate expert-style recommendations using the ClinicalAgent.
+
+        Notes:
+            - This call ignores the triage gate for medicines because ClinicalAgent is designed
+              to produce an expert bundle; however, you may choose to respect triage by modifying
+              this method if desired.
+            - Returns a flattened list of suggestions suitable for the existing frontend's
+              recommendations panel.
+        """
+        # Use the same query construction as recommendations_for
+        last_user_texts = [m.content for m in session.messages if m.role == "user"][-3:]
+        if not last_user_texts:
+            last_user = next((m for m in reversed(session.messages) if m.role == "user"), None)
+            query = last_user.content if last_user else (session.messages[-1].content if session.messages else "")
+        else:
+            query = " ".join(last_user_texts)
+        return self.clinical_agent.recommend(query or "general")

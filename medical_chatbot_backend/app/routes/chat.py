@@ -38,6 +38,32 @@ def get_session(session_id: str):
     recs = chat_service.recommendations_for(session)
     return ChatResponse(id=session.id, messages=session.messages, recommendations=recs)
 
+@router.get(
+    "/chat/{session_id}/expert",
+    response_model=List[str],
+    summary="Expert recommendations (ClinicalAgent)",
+    description=(
+        "Return expert-style recommendations using the ClinicalAgent for the given session. "
+        "Includes suggested tests/assessments, medicines/supportive care where appropriate, and a strong disclaimer."
+    ),
+)
+# PUBLIC_INTERFACE
+def get_session_expert_recommendations(session_id: str) -> List[str]:
+    """
+    Fetch expert recommendations for a chat session.
+
+    Args:
+        session_id: The chat session identifier.
+
+    Returns:
+        List[str]: Flattened list of expert suggestions derived from ClinicalAgent,
+        including suggested tests, medicines/support, and a strong disclaimer.
+    """
+    session = chat_service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return chat_service.recommendations_expert_for(session)
+
 @router.post(
     "/chat",
     response_model=ChatResponse,
