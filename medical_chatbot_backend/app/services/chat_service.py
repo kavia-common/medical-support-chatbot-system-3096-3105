@@ -6,6 +6,19 @@ from ..models.schemas import ChatSession, Message
 from ..agents.patient_agent import PatientAgent
 from ..agents.medical_agent import MedicalAgent
 
+def _strip_slot_markers(text: str) -> str:
+    """
+    Remove any [slot:...] markers from assistant text before exposing/storing for RAG relevance.
+    """
+    if not text:
+        return text
+    parts = []
+    for token in text.split():
+        if token.startswith("[slot:"):
+            continue
+        parts.append(token)
+    return " ".join(parts)
+
 class ChatService:
     """
     In-memory chat session manager. For demo purposes.
@@ -54,8 +67,10 @@ class ChatService:
 
         # PatientAgent response
         reply_text = self.patient_agent.respond(session.messages, user_text)
+        # Store assistant message but strip markers for user-facing display
+        clean_reply = _strip_slot_markers(reply_text)
         session.messages.append(
-            Message(role="assistant", content=reply_text, timestamp=datetime.utcnow())
+            Message(role="assistant", content=clean_reply, timestamp=datetime.utcnow())
         )
 
         # Update title if not set
@@ -67,7 +82,17 @@ class ChatService:
 
     # PUBLIC_INTERFACE
     def recommendations_for(self, session: ChatSession) -> List[str]:
-        """Generate recommendations for the latest user query using MedicalAgent."""
-        last_user = next((m for m in reversed(session.messages) if m.role == "user"), None)
-        query = last_user.content if last_user else (session.messages[-1].content if session.messages else "")
+        """
+        Generate recommendations for the latest context by combining the last few user queries.
+        This increases contextual relevance for the simple vector search.
+        """
+        # Combine last N user utterances (e.g., 3) for a richer query
+        last_user_texts = [m.content for m in session.messages if m.role == "user"][-3:]
+        if not last_user_texts:
+            # Fallback to last assistant/user if user is missing
+            last_user = next((m for m in reversed(session.messages) if m.role == "user"), None)
+            query = last_user.content if last_user else (session.messages[-1].content if session.messages else "")
+        else:
+            query = " ".join(last_user_texts)
+
         return self.medical_agent.recommend(query or "general")

@@ -12,6 +12,21 @@ GUIDELINES: List[Dict[str, str]] = [
         ),
     },
     {
+        "id": "cough_medicine_support",
+        "text": (
+            "Cough supportive care: hydration, honey (not for children under 1), and throat lozenges. "
+            "Consider simple cough suppressants per local guidelines for short-term relief."
+        ),
+    },
+    {
+        "id": "fever_antipyretics",
+        "text": (
+            "Fever management: consider acetaminophen (paracetamol) as first-line antipyretic, "
+            "following package dosing and never exceeding maximum daily dose. "
+            "Ibuprofen can be considered if appropriate for the individual (avoid in certain kidney, ulcer, or bleeding risks)."
+        ),
+    },
+    {
         "id": "chest_pain_tests",
         "text": (
             "Chest pain evaluation: assess onset, character, radiation, associated symptoms. "
@@ -23,6 +38,13 @@ GUIDELINES: List[Dict[str, str]] = [
         "text": (
             "Post-prandial headache and nausea may indicate migraine or reflux among other causes. "
             "Consider dietary triggers, hydration, sleep hygiene. If severe or frequent, consult a clinician."
+        ),
+    },
+    {
+        "id": "pain_general_analgesia",
+        "text": (
+            "For mild to moderate pain or headache, consider acetaminophen first-line. "
+            "Ibuprofen may help if appropriate; take with food. Review contraindications and always follow label instructions."
         ),
     },
     {
