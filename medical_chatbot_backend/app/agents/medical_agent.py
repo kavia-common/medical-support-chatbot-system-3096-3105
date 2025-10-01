@@ -53,20 +53,26 @@ class MedicalAgent:
         """
         # Deterministic retrieval for given query using mock embeddings; filter disclaimer doc
         results = self.store.query(user_query or "general", k=max(1, k))
-        recs: List[str] = []
+        core: List[str] = []
         for _, text, _ in results:
             if "informational purposes only" in text.lower():
                 continue
-            recs.append(text)
+            core.append(text)
+
+        recs: List[str] = []
+        if core:
+            recs.append("Contextual guidance:")
+            recs.extend(core[:3])
 
         # Add minimal heuristic medicine suggestions if relevant to query AND allowed
         if allow_meds:
             med_suggestions = self._medicine_suggestions(user_query)
             if med_suggestions:
-                recs.extend(med_suggestions)
+                recs.append("Possible OTC/support (if appropriate):")
+                recs.extend(med_suggestions[:3])
 
         # Remove duplicates while preserving ordering and trim to a reasonable size
-        recs = self._dedupe_preserve_order(recs)[: 3 + (2 if allow_meds else 0)]
+        recs = self._dedupe_preserve_order(recs)[: 6]
 
         # Add explicit disclaimer as final entry (ensure single instance)
         if not any(DISLCAIMER_TEXT.lower() in (r or "").lower() for r in recs):

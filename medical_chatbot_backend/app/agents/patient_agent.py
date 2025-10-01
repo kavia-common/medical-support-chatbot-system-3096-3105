@@ -40,8 +40,8 @@ class PatientAgent:
 
     def _answered_slots_from_history(self, history: List[Message]) -> Set[str]:
         answered: Set[str] = set()
-        # Examine last few user messages to infer responses
-        user_msgs = [m.content.lower() for m in history if m.role == "user"][-8:]
+        # Examine all user messages to infer responses robustly across the full conversation
+        user_msgs = [m.content.lower() for m in history if m.role == "user"]
         text = " ".join(user_msgs)
 
         # Heuristics for slot completion
@@ -51,22 +51,22 @@ class PatientAgent:
             answered.add("severity")
         if any(k in text for k in ["associated", "along with", "also", "in addition", "other symptoms", "and", "plus"]):
             answered.add("associated")
-        if "temperature" in text or any(k in text for k in ["°c", "°f", "fever of", "temp", "measured my temperature", "my temp", "was 3", "was 1"]):
+        if "temperature" in text or any(k in text for k in ["°c", "°f", "fever of", "temp", "measured my temperature", "my temp", "was 3", "was 1", "38c", "38."]):
             answered.add("temperature")
-        if any(k in text for k in ["pain in", "hurts in", "located", "location", "at my", "on my", "my pain is in", "where the pain"]):
+        if any(k in text for k in ["pain in", "hurts in", "located", "location", "at my", "on my", "my pain is in", "where the pain", "in the center of my chest"]):
             answered.add("pain_location")
 
         return answered
 
     def _needs_temperature(self, history: List[Message], current_user_text: str) -> bool:
         text = (current_user_text or "").lower() + " " + " ".join(
-            [m.content.lower() for m in history if m.role == "user"][-6:]
+            [m.content.lower() for m in history if m.role == "user"]
         )
         return ("fever" in text or "temperature" in text or "temp" in text)
 
     def _needs_pain_location(self, history: List[Message], current_user_text: str) -> bool:
         text = (current_user_text or "").lower() + " " + " ".join(
-            [m.content.lower() for m in history if m.role == "user"][-6:]
+            [m.content.lower() for m in history if m.role == "user"]
         )
         return ("pain" in text)
 
@@ -113,9 +113,9 @@ class PatientAgent:
             answered.add("severity")
         if "associated" in asked and "associated" not in answered and any(k in lower for k in ["also","in addition","other symptoms","along with","and","plus"]):
             answered.add("associated")
-        if "temperature" in asked and "temperature" not in answered and any(k in lower for k in ["temperature","temp","°c","°f","fever of","was "]):
+        if "temperature" in asked and "temperature" not in answered and any(k in lower for k in ["temperature","temp","°c","°f","fever of","was ","38c","38."]):
             answered.add("temperature")
-        if "pain_location" in asked and "pain_location" not in answered and any(k in lower for k in ["in my","at my","on my","located","location","where"]):
+        if "pain_location" in asked and "pain_location" not in answered and any(k in lower for k in ["in my","at my","on my","located","location","where","center of my chest"]):
             answered.add("pain_location")
 
         # Conditional needs
@@ -137,7 +137,7 @@ class PatientAgent:
                 asked.add("associated")
 
             # Conditional slots
-            if needs_temp and "temperature" not in asked and "temperature" not in answered and not any(k in lower for k in ["temperature","temp","°c","°f"]):
+            if needs_temp and "temperature" not in asked and "temperature" not in answered and not any(k in lower for k in ["temperature","temp","°c","°f","38c"]):
                 prompts.append(f"{self.SLOT_MARKERS['temperature']} Have you measured your temperature? What was it?")
                 asked.add("temperature")
             if needs_pain_loc and "pain_location" not in asked and "pain_location" not in answered and not any(k in lower for k in ["location","located","in my","on my","at my"]):

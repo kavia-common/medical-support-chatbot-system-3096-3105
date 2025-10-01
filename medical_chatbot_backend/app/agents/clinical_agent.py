@@ -12,34 +12,6 @@ class ClinicalAgent:
           - Suggested diagnostic tests or next steps
           - Suggested over-the-counter medicines or supportive care
         It always appends a strong medical disclaimer.
-
-    Behavior:
-        - Performs a top-k retrieval using the shared guideline vector store on the given query/context.
-        - Heuristically extracts or proposes:
-            * tests: e.g., ECG, troponin, chest X-ray if chest pain; temperature checks; etc.
-            * medicines/support: generic, OTC guidance such as acetaminophen or ibuprofen if appropriate,
-              hydration, honey/lozenges for cough (with safety caveats).
-        - Output is structured as a dict with "tests", "medicines", and a "notes" list including the disclaimer.
-          A flattened list can also be provided via recommend() for compatibility with the frontend.
-
-    Usage:
-        agent = ClinicalAgent()
-        result = agent.suggest(user_query="I have chest pain with shortness of breath")
-        # result = {"tests": [...], "medicines": [...], "notes": ["...disclaimer..."]}
-
-        Or a simple flattened list:
-        flat = agent.recommend("I have fever and cough")  # -> [ "...", "...", "Recommendations are not medical advice..." ]
-
-    Inputs:
-        user_query: str — Free text built from the conversation or the user's latest messages.
-        k: int — Number of guideline snippets to retrieve.
-
-    Outputs:
-        suggest(): Dict[str, List[str]] with keys "tests", "medicines", "notes".
-        recommend(): List[str] flattened list of all suggestions plus disclaimer.
-
-    Disclaimer:
-        All outputs include a strong medical disclaimer and must not be taken as medical advice.
     """
 
     def __init__(self):
@@ -148,6 +120,8 @@ class ClinicalAgent:
 
         notes: List[str] = []
         # Include up to top 2 retrieved items as contextual notes (optional, trimmed)
+        if retrieved_texts:
+            notes.append("Contextual notes:")
         for text in retrieved_texts[:2]:
             notes.append(text)
 

@@ -112,7 +112,7 @@ class ChatService:
             Message(role="assistant", content=clean_reply, timestamp=datetime.utcnow())
         )
 
-        # Update title if not set
+        # Update title if not set or too generic
         if not session.title:
             session.title = user_text[:50]
 
