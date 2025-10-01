@@ -8,9 +8,9 @@ class MedicalAgent:
     Adds light logic to include medicine suggestions for common cases (e.g., fever, pain),
     always with a strong disclaimer.
 
-    Tightening changes:
-    - Medicine suggestions are strictly tied to explicit symptom mentions in the (ChatService-built) query.
-    - No generic cough/pain/fever meds if respective symptom is not present in the query.
+    Guardrails and maintainability:
+    - This agent does NOT emit specific diagnostic tests (ECG, troponin, CXR). Those belong to ClinicalAgent.
+    - Medicine/support suggestions are symptom-linked only (fever/pain/cough), ensuring cold/flu yields only basic supportive care.
     """
 
     def __init__(self):
@@ -34,7 +34,7 @@ class MedicalAgent:
         if "pain" in q or "headache" in q:
             meds.append("For mild to moderate pain or headache: acetaminophen as first-line; consider ibuprofen if appropriate for you.")
 
-        # Cough-linked
+        # Cough-linked (supportive only)
         if "cough" in q:
             meds.append("Hydration and throat lozenges may help. For bothersome cough, consider a simple cough suppressant as per local guidance.")
 
@@ -73,6 +73,7 @@ class MedicalAgent:
 
         recs: List[str] = []
         if core:
+            # Context summary should remain general; explicit tests are not listed here.
             recs.append("Contextual guidance (linked to your symptoms):")
             recs.extend(core[:3])
 

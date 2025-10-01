@@ -12,6 +12,10 @@ class ClinicalAgent:
           - Suggested diagnostic tests or next steps
           - Suggested over-the-counter medicines or supportive care
         It always appends a strong medical disclaimer.
+
+    Maintainability notes:
+    - All test suggestions are strictly symptom- and guideline-coupled to avoid unsafe overreach.
+    - Advanced tests (ECG/troponin/CXR) are gated behind red-flag or chest-pain contexts in the RAG input.
     """
 
     def __init__(self):
@@ -21,45 +25,49 @@ class ClinicalAgent:
         """
         Heuristic extraction of tests explicitly linked to symptoms AND guideline retrieval.
 
-        Emission rules (tightened):
-        - Emit chest-pain related tests only if the user mentions chest pain/tightness OR
-          the retrieved guideline snippet explicitly references chest pain testing,
-          AND the retrieved snippet contains the specific test keyword (ECG, troponin, CXR).
-        - Emit respiratory checks (SpO2) only when respiratory symptom is present (cough/SOB)
-          OR the retrieved guideline mentions oxygen/saturation context.
-        - Emit temperature check only when fever/temperature context present in user text.
+        Emission policy:
+        - Advanced tests (ECG, troponin, chest X-ray) are ONLY suggested if BOTH:
+          (A) RAG/user context indicates chest pain/tightness, syncope, collapse, severe shortness of breath, or similar red flags
+          AND
+          (B) The retrieved guideline mentions the specific test (for additional guardrail) OR the user query indicates chest pain.
+        - Basic checks for cold/flu patterns:
+          - Temperature when fever/temperature mentioned.
+          - Pulse oximetry (SpO2) only if respiratory symptoms (cough/shortness of breath) are present or guidelines reference oxygen/saturation.
 
-        This avoids overly-broad or random emissions (e.g., generic panels for cough).
+        This minimizes irrelevant or unsafe testing suggestions for benign presentations (e.g., simple cold/flu).
         """
         q = (user_query or "").lower()
         tests: List[str] = []
 
-        # Symptom flags from user query
+        # Symptom flags from user/RAG context
         has_chest_pain = ("chest pain" in q) or ("chest tightness" in q)
         has_cough = ("cough" in q)
         has_fever = ("fever" in q or "temperature" in q or "temp" in q)
         has_sob = ("shortness of breath" in q) or ("dyspnea" in q)
+        has_syncope = ("syncope" in q) or ("passed out" in q) or ("fainted" in q) or ("collapse" in q)
 
-        # Scan retrieved texts to ensure guideline-coupled suggestions
+        # Retrieve guideline context flags
         joined = " ".join(rt.lower() for rt in retrieved_texts)
-        g_has_chest_pain_ctx = "chest pain" in joined or "chest tightness" in joined
+        g_has_chest_pain_ctx = ("chest pain" in joined) or ("chest tightness" in joined)
         g_has_ecg = "ecg" in joined
         g_has_trop = "troponin" in joined
         g_has_cxr = ("chest x-ray" in joined) or ("x-ray" in joined) or ("chest xray" in joined)
         g_has_sat = ("saturation" in joined) or ("oxygen" in joined) or ("oximeter" in joined)
 
-        # Chest pain-focused tests: require chest pain context from either user or guideline,
-        # and require the specific test keyword to appear (to avoid generic emissions).
-        chest_ctx = has_chest_pain or g_has_chest_pain_ctx
-        if chest_ctx:
-            if g_has_ecg or has_chest_pain:
-                tests.append("Test: ECG (electrocardiogram) — Use-case: Initial assessment for chest pain. Safety/escalation: If severe pain, syncope, or persistent symptoms, seek urgent in-person evaluation.")
-            if g_has_trop or has_chest_pain:
-                tests.append("Test: High-sensitivity troponin — Use-case: Assess myocardial injury when indicated. Safety: Follow local protocols; abnormal results need clinical evaluation.")
-            if g_has_cxr or has_chest_pain:
-                tests.append("Test: Chest X-ray — Use-case: Evaluate for pulmonary or structural causes when appropriate. Safety: Radiation exposure minimal; use per clinical guidance.")
+        # Red-flag gating: require red flag context for advanced tests
+        red_flag_ctx = has_chest_pain or has_syncope or has_sob or g_has_chest_pain_ctx
 
-        # Fever check: only when fever/temperature context exists
+        # Advanced tests only when red-flag/chest contexts are present
+        if red_flag_ctx:
+            # Require explicit test mention in guidelines or explicit chest pain in the query as additional safeguard
+            if g_has_ecg or has_chest_pain:
+                tests.append("Test: ECG (electrocardiogram) — Use-case: Initial assessment for chest pain or concerning syncope/collapse. Safety/escalation: If severe pain, syncope, or persistent symptoms, seek urgent in-person evaluation.")
+            if g_has_trop or has_chest_pain:
+                tests.append("Test: High-sensitivity troponin — Use-case: Assess myocardial injury when indicated in chest pain contexts. Safety: Follow local protocols; abnormal results need clinical evaluation.")
+            if g_has_cxr or has_chest_pain:
+                tests.append("Test: Chest X-ray — Use-case: Evaluate for pulmonary/structural causes when appropriate in red-flag respiratory or chest-pain presentations. Safety: Minimal radiation; use per clinical guidance.")
+
+        # Basic fever check for classic cold/flu symptoms
         if has_fever:
             tests.append("Check: Temperature — Use-case: Track fever trends and response to antipyretics. Safety: Follow dosing limits if using antipyretics.")
 
@@ -153,8 +161,8 @@ class ClinicalAgent:
             linkage.append("Reasoning: Fever-related suggestions included based on your reported fever/temperature.")
         if "cough" in uq:
             linkage.append("Reasoning: Cough-related guidance included due to your cough symptoms.")
-        if any(k in uq for k in ["chest pain", "chest tightness"]):
-            linkage.append("Reasoning: Chest pain pattern detected; tests aligned with guideline mentions (ECG, troponin, CXR).")
+        if any(k in uq for k in ["chest pain", "chest tightness", "syncope", "fainted", "collapse"]):
+            linkage.append("Reasoning: Red-flag pattern detected (e.g., chest pain/syncope); tests aligned with guideline mentions (ECG, troponin, CXR).")
         if "shortness of breath" in uq or "dyspnea" in uq:
             linkage.append("Reasoning: Respiratory symptoms noted; oxygen saturation checks considered when appropriate.")
         if any(k in uq for k in ["headache", "nausea"]):

@@ -20,9 +20,25 @@ def test_clinical_agent_cough_without_chest_pain_does_not_emit_chest_tests():
     flat = agent.recommend(q)
     lower = [s.lower() for s in flat]
     # Should not include chest-pain specific tests
-    assert not any("ecg" in s or "troponin" in s for s in lower), "ECG/Troponin should not be suggested for isolated cough"
+    assert not any("ecg" in s or "troponin" in s or "x-ray" in s for s in lower), "ECG/Troponin/CXR should not be suggested for isolated cough"
     # May include pulse oximetry check due to respiratory context
     assert any("oximetry" in s or "spo2" in s for s in lower), "SpO2 check should be allowed for respiratory symptoms"
+
+# PUBLIC_INTERFACE
+def test_clinical_agent_basic_cold_flu_returns_only_basic_checks():
+    """
+    Classic cold/flu symptoms without chest pain/syncope/SOB should only suggest basic checks
+    (temperature, and SpO2 only if respiratory symptoms), no ECG/troponin/CXR.
+    """
+    agent = ClinicalAgent()
+    q = "Runny nose, sore throat, cough, fever and body aches for 2 days. No chest pain."
+    flat = agent.recommend(q)
+    lower = [s.lower() for s in flat]
+    # No advanced tests
+    assert not any("ecg" in s or "troponin" in s or "x-ray" in s for s in lower), "Advanced tests must not be suggested for cold/flu"
+    # Allow basic checks
+    assert any("temperature" in s for s in lower), "Temperature check should be suggested when fever mentioned"
+    assert any("oximetry" in s or "spo2" in s for s in lower), "SpO2 check may be suggested with respiratory symptoms"
 
 # PUBLIC_INTERFACE
 def test_medical_agent_meds_are_symptom_linked():
