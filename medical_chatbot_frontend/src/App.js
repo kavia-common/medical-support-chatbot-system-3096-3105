@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import './index.css';
-import { API_BASE_URL as API_BASE, apiUrl } from './api';
+import { API_BASE_URL as API_BASE, apiUrl, apiHealthCheck } from './api';
 
 /**
  * Theme constants aligned to "Ocean Professional"
@@ -307,10 +307,23 @@ function App() {
       setHistoryLoading(true);
       setError('');
       try {
+        // quick health check first for clearer diagnostics
+        const health = await apiHealthCheck();
+        if (!health.ok) {
+          throw new Error(
+            `Backend health check failed for ${health.url}. ` +
+              (health.message || `Status ${health.status}.`) +
+              ' Ensure REACT_APP_API_BASE_URL is set to the backend URL.'
+          );
+        }
         const data = await getHistory();
         if (!ignore) setSessions(Array.isArray(data) ? data : []);
       } catch (e) {
-        if (!ignore) setError(e.message || 'Failed to load history');
+        if (!ignore)
+          setError(
+            (e && e.message) ||
+              'Failed to load history. Verify REACT_APP_API_BASE_URL and backend availability.'
+          );
       } finally {
         if (!ignore) setHistoryLoading(false);
       }

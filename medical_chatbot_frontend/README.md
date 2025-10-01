@@ -30,10 +30,15 @@ Copy `.env.example` to `.env` and set the backend URL.
 
 ```bash
 cp .env.example .env
-# edit .env and set REACT_APP_API_BASE_URL=http://localhost:8000
+# edit .env and set REACT_APP_API_BASE_URL to your backend URL
+# Local dev example:
+# REACT_APP_API_BASE_URL=http://localhost:8000
+# Cloud proxy example:
+# REACT_APP_API_BASE_URL=https://vscode-internal-30348-beta.beta01.cloud.kavia.ai/proxy/8001
 ```
 
-If you don’t set `REACT_APP_API_BASE_URL`, the app will default to `http://localhost:8000` for development/preview environments.
+If you don’t set `REACT_APP_API_BASE_URL`, the app will try to infer the proxy URL in this environment;
+otherwise it will default to `http://localhost:8000` for development/preview environments.
 
 3) Run the development server
 
